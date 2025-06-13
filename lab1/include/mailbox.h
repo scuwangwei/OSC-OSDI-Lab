@@ -20,6 +20,6 @@
 #define TAG_REQUEST_CODE    0x00000000
 #define END_TAG             0x00000000
 
-void get_board_version();
+void get_board_revision();
 void get_memory_information();
 #endif

@@ -14,7 +14,7 @@ OBJS:= $(SRC_C:%.c=%.o) \
 
 all:$(K8).img
 
-run_on_qemu:$(K8).img
+run_qe_k8:$(K8).img
 	qemu-system-aarch64 -M raspi3 -kernel $< -serial null -serial stdio
 
 start.o: start.s

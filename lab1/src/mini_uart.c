@@ -55,6 +55,14 @@ void mini_uart_write(char tmp)
     *AUX_MU_IO_REG = tmp;//write to register
 }
 
+void mini_uart_send_string(const char *str)
+{
+    while(*str)
+    {
+        mini_uart_write(*str++);
+    }
+}
+
 void mini_uart_read_string(char *buffer, int max_len)
 {
     int i = 0;
@@ -64,9 +72,12 @@ void mini_uart_read_string(char *buffer, int max_len)
     {
         c = mini_uart_read();//read from register
 
+        if(c == '\n') {
+            mini_uart_send_string("\r\n");
+            break; // get a cmd
+        }
+        
         mini_uart_write(c); //echo back
-
-        if(c == '\n') break; // get a cmd
 
         buffer[i++] = c;
     }
@@ -74,24 +85,13 @@ void mini_uart_read_string(char *buffer, int max_len)
     buffer[i] = '\0';// end of a string
 }
 
-void mini_uart_send_string(const char *str)
-{
-    while(*str)
-    {
-        mini_uart_write(*str++);
-    }
-}
-
 void mini_uart_send_hex(unsigned int num)
 {
-    unsigned int n;
-    int i;
     mini_uart_send_string("0x");
-    for (i = 28; i >= 0; i -= 4)
+    for (int i = 28; i >= 0; i -= 4)
     {
-        n = (num >> i) & 0xF;
-        // 0-9 => '0'-'9', 10-15 => 'A'-'F'
-        n += n > 9 ? 0x57 : 0x30;
+        int n = (num >> i) & 0xF;
+        n += n > 9 ? 0x37 : 0x30;
         mini_uart_write(n);
     }
 }

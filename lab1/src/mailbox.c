@@ -1,21 +1,27 @@
 #include "mailbox.h"
 #include "mini_uart.h"
 
+//mailbox message calling procedure
 int mailbox_call(unsigned int *mailbox)
 {
-    //complete this
+    //put channel 8 at the lowest 4 bits
     unsigned int message_and_channel = (((unsigned int)(unsigned long)mailbox) & ~0xF) | 8;
+    
+    //check mailbox status is full or not
     while(*MAILBOX_STATUS & MAILBOX_FULL){
       asm volatile("nop");
     }
 
+    //wirte message
     *MAILBOX_WRITE = message_and_channel;
     while(1)
     {
+      //check mailbox status is empty or not
       while(*MAILBOX_STATUS & MAILBOX_EMPTY)
       {
         asm volatile("nop");
       }
+      //wai for a response for gpu(polling) and check response status
       if(message_and_channel == *MAILBOX_READ) return mailbox[1] == RESPONSE_SUCCESS;
     }
     return 0;
@@ -38,7 +44,7 @@ void get_board_revision()
   if(mailbox_call(mailbox))// message passing procedure call, you should implement it following the 6 steps provided above.
   {
     mini_uart_send_string("Board Revision: ");
-    mini_uart_send_hex(mailbox[5]);// it should be 0xa020d3 for rpi3 b+
+    mini_uart_send_hex(mailbox[5]);// it should be 0xa020d3 for rpi3 b+,not sure what for qemu rpi3
   }
   else {
     mini_uart_send_string("Failed to get board revision info.");

@@ -1,5 +1,6 @@
 #include "mini_uart.h"
 #include "pm.h"
+#include "mailbox.h"
 
 #define CMD_BUFFER_SIZE 128
 char cmd_buffer[CMD_BUFFER_SIZE];
@@ -38,7 +39,7 @@ void show_all_command()
     mini_uart_send_string("help - Show this help message\r\n");
     mini_uart_send_string("hello - Show Hello World\r\n");
     mini_uart_send_string("info - Show board revision and memory info\r\n");
-    mini_uart_send_string("reboot - Reboot the system");
+    mini_uart_send_string("reboot - Reboot the system,This only works on real rpi machine");
 
 }
 
