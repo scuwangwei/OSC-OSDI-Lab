@@ -6,7 +6,7 @@ const char* strings_block;
 const char* struct_block;
 const char* fdt_end_ptr;
 //global var
-char *fdt_cpio_addr = 0;
+char *fdt_cpio_addr;
 
 //parse node recursivelly,get property and sub node
 void fdt_parse_node(const char** ptr, fdt_callback callback, const char* node_name) {
