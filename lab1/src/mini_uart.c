@@ -73,7 +73,6 @@ void mini_uart_read_string(char *buffer, int max_len)
         c = mini_uart_read();//read from register
 
         if(c == '\n') {
-            mini_uart_send_string("\r\n");
             break; // get a cmd
         }
         
@@ -83,6 +82,7 @@ void mini_uart_read_string(char *buffer, int max_len)
     }
 
     buffer[i] = '\0';// end of a string
+    mini_uart_send_string("\r\n");
 }
 
 void mini_uart_send_hex(unsigned int num)
