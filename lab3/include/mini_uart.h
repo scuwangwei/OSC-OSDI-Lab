@@ -45,7 +45,8 @@ int rbuf_is_empty(ringBuffer *rbuf);
 int rbuf_is_full(ringBuffer *rbuf);
 int rbuf_put(ringBuffer *rbuf, char c);
 int rbuf_get(ringBuffer *rbuf, char *c);
-void mini_uart_handler();
+char mini_uart_read_non_block();
+void mini_uart_read_string_non_block(char *buffer, int max_len);
 
 
 #endif

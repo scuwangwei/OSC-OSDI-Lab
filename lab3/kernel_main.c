@@ -1,6 +1,7 @@
 #include "mini_uart.h"
 #include "shell.h"
 #include "dtb.h"
+#include "exception.h"
 
 extern void* _dtb_addr;
 void main()
@@ -12,6 +13,6 @@ void main()
     mini_uart_send_hex((unsigned int)_dtb_addr);
     mini_uart_send_string("\r\n");
     fdt_traverse(_dtb_addr,get_ramfs_addr);
-    enable_irq();//enable irq
+    irq_init();
     shell();
 }

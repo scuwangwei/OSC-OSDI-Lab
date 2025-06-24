@@ -3,6 +3,7 @@
 #include "gpio.h"
 #include "base.h"
 #include "mailbox.h"
+#include "exception.h"
 
 ringBuffer uart_rx_buffer;
 ringBuffer uart_tx_buffer;
@@ -52,6 +53,16 @@ char mini_uart_read()
     return tmp;
 }
 
+char mini_uart_read_non_block()
+{
+    while(!((*AUX_MU_LSR_REG) & 0x1)){
+        task_dispatcher(TASK_MAX_PRIORITY);//keep checking if task need to be executed
+     }
+    char tmp = (*AUX_MU_IO_REG) & 0xFF;
+    if(tmp == '\r') tmp = '\n';// /r means newline in keyboard
+    return tmp;
+}
+
 void mini_uart_write(char tmp)
 {
     while(!((*AUX_MU_LSR_REG) & 0x20)){} //if transmitter cannot accept at least one byte,wait(from document,5th bit referes trasmitter empty)
@@ -88,6 +99,27 @@ void mini_uart_read_string(char *buffer, int max_len)
     mini_uart_send_string("\r\n");
 }
 
+void mini_uart_read_string_non_block(char *buffer, int max_len)
+{
+    int i = 0;
+    char c;
+
+    while(i < max_len - 1)
+    {
+        c = mini_uart_read_non_block();//read from register and keep checking task queue
+
+        if(c == '\n') {
+            break; // get a cmd
+        }
+        
+        mini_uart_write(c); //echo back
+
+        buffer[i++] = c;
+    }
+
+    buffer[i] = '\0';// end of a string
+    mini_uart_send_string("\r\n");
+}
 
 void mini_uart_send_hex(unsigned int num)
 {

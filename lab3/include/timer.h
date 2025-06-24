@@ -24,6 +24,6 @@ timer_event_t *timer_alloc();
 void timer_free(timer_event_t *event);
 void add_timer(void (*callback)(void *), void *data, unsigned int delay_secs);
 void print_msg_callback(void *msg);
-void print_boot_time();
+void print_boot_time(void *unuse);
 
 #endif

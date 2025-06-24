@@ -40,6 +40,19 @@
     add sp, sp, 32 * 8
 .endm
 
+.macro save_spsr_elr
+    sub sp, sp, 16
+    mrs x0, spsr_el1
+    mrs x1, elr_el1
+    stp x0, x1, [sp]
+.endm
+
+.macro restore_spsr_elr
+    ldp x0, x1, [sp]
+    msr spsr_el1, x0
+    msr elr_el1, x1
+    add sp, sp, 16
+.endm
 // switch exception levels
 .globl from_el2_to_el1
 from_el2_to_el1:
@@ -74,7 +87,7 @@ exception_vector_table:
 
   b lower_el_aarch64_sync
   .align 7
-  b exception_handler
+  b lower_el_aarch64_irq
   .align 7
   b exception_handler
   .align 7
@@ -93,19 +106,28 @@ exception_vector_table:
 .global lower_el_aarch64_sync
 lower_el_aarch64_sync:
     save_all
-    mrs x0, spsr_el1      // para x0
-    mrs x1, elr_el1       // para x1
-    mrs x2, esr_el1       // para x2
+    save_spsr_elr
     bl lower_el_aarch64_sync_c
+    restore_spsr_elr
     load_all
     eret
 
 .global el_curr_el_spx_irq
 el_curr_el_spx_irq:
     save_all
+    save_spsr_elr
     bl el_curr_el_spx_irq_c
+    restore_spsr_elr
     load_all
     eret
 
+.global lower_el_aarch64_irq
+lower_el_aarch64_irq:
+    save_all
+    save_spsr_elr
+    bl lower_el_aarch64_irq_c
+    restore_spsr_elr
+    load_all
+    eret
 
 exception_handler:

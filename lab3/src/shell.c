@@ -6,6 +6,7 @@
 #include "alloca.h"
 #include "dtb.h"
 #include "timer.h"
+#include "exception.h"
 
 #define CMD_BUFFER_SIZE 128
 #define MAX_READ_BUFFER 64
@@ -146,7 +147,6 @@ void parse_command(const char *cmd)
             }
             else
             {
-                core_timer_enable();
                 set_message_timer(msg,&seconds);
             }
 
@@ -176,9 +176,10 @@ void shell()
 {
     while(1)
     {
+        task_dispatcher(TASK_MAX_PRIORITY);//execute task if task queue is not empty
         mini_uart_send_string("#");//echo a # to console
-        mini_uart_read_string(cmd_buffer,CMD_BUFFER_SIZE);
-        parse_command(cmd_buffer);
+        mini_uart_read_string_non_block(cmd_buffer,CMD_BUFFER_SIZE);//wait for host send command and keep checking task queue
+        parse_command(cmd_buffer);//parse command
     }
 
 }

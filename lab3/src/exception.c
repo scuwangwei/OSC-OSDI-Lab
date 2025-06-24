@@ -3,6 +3,99 @@
 #include "utils.h"
 #include "exception.h"
 
+
+/*--------------Task Queue-----------*/
+#define TASK_QUEUE_SIZE 32
+
+typedef struct task {
+    void (*func)(void *);
+    void *arg;
+} task_t;
+
+typedef struct task_queue
+{
+    task_t task_queue[TASK_PRIORITY_Q_NUM][TASK_QUEUE_SIZE];
+    int head[TASK_PRIORITY_Q_NUM];
+    int tail[TASK_PRIORITY_Q_NUM];
+} multi_lev_task_queue;
+
+multi_lev_task_queue ML_task_queue;
+
+void init_task_queue()
+{
+    for (int i = 0; i < TASK_PRIORITY_Q_NUM; i++) {
+        ML_task_queue.head[i] = 0;
+        ML_task_queue.tail[i] = 0;
+    }
+}
+
+
+int next_index(int idx) {
+    return (idx + 1) % TASK_QUEUE_SIZE;
+}
+
+int task_queue_empty(int level) {
+    return ML_task_queue.head[level] == ML_task_queue.tail[level];
+}
+
+void enqueue_task(void (*func)(void *), void *arg,int priority)
+{
+
+    int next = next_index(ML_task_queue.tail[priority]);
+    if(next == ML_task_queue.head[priority]) return; //queue full
+    int cur = ML_task_queue.tail[priority];
+    ML_task_queue.task_queue[priority][cur].func = func;
+    ML_task_queue.task_queue[priority][cur].arg = arg;
+
+    ML_task_queue.tail[priority] = next;
+}
+
+void task_dispatcher(int prior_level)
+{
+    int cur_lev_head;
+    while (prior_level >= 0)
+    {
+        if (task_queue_empty(prior_level)) 
+        {
+            prior_level--;
+            break;
+        }
+        cur_lev_head = ML_task_queue.head[prior_level];
+        task_t task = ML_task_queue.task_queue[prior_level][cur_lev_head];
+        cur_lev_head = next_index(cur_lev_head);
+        ML_task_queue.head[prior_level] = cur_lev_head;
+        task.func(task.arg);
+
+    }
+}
+
+//read and print registers info
+void print_register_info(void *arg)
+{
+    unsigned long spsr, elr, esr;
+    asm volatile("mrs %0, spsr_el1" : "=r"(spsr));
+    asm volatile("mrs %0, elr_el1"  : "=r"(elr));
+    asm volatile("mrs %0, esr_el1"  : "=r"(esr));
+
+    mini_uart_send_string("\r\n[Exception Handler]\r\n");
+    mini_uart_send_string("SPSR_EL1: ");
+    mini_uart_send_hex(spsr);
+    mini_uart_send_string("\r\n");
+
+    mini_uart_send_string("ELR_EL1: ");
+    mini_uart_send_hex(elr);
+    mini_uart_send_string("\r\n");
+
+    mini_uart_send_string("ESR_EL1: ");
+    mini_uart_send_hex(esr);
+    mini_uart_send_string("\r\n");
+
+    mini_uart_send_string("Warining:This user program will hang,so you need to restart the system\r\n");
+
+}
+
+/*-------------------------------Handlers-----------------------*/
+
 /*Core Timer Interrupt Handler,executed when time expired*/
 void core_timer_irq_handler() {
     //mini_uart_send_string("core timer irq called\r\n");
@@ -13,10 +106,9 @@ void core_timer_irq_handler() {
     //traverse timer queue,and execute call back for those which time expired
     while(timer_queue && timer_queue->expire_time <= cur_ticks)
     {
-
         timer_event_t *expired_event = timer_queue;
         timer_queue = timer_queue->next;
-        expired_event->callback(expired_event->data);
+        enqueue_task(expired_event->callback,expired_event->data,1);
         timer_free(expired_event);
     }
 
@@ -30,7 +122,7 @@ void core_timer_irq_handler() {
         core_timer_set_timeout_ticks(delay);
         return;
     }
-    core_timer_set_timeout(1);
+    else core_timer_set_timeout(1);
 
 }
 
@@ -46,7 +138,7 @@ void mini_uart_irq_handler()
     int isTX = (*AUX_MU_IIR_REG & 0x2);
     if(isRX)
     {
-        //move receive FIFO buffer data to ring buffer,
+        //move receive FIFO buffer data to ring buffer
         char c = (char)(*AUX_MU_IO_REG);
         rbuf_put(&uart_rx_buffer, c);
         //read finished,disable recieve IRQ
@@ -73,21 +165,33 @@ void mini_uart_irq_handler()
 }
 
 
-void lower_el_aarch64_sync_c(unsigned long spsr, unsigned long elr, unsigned long esr)
+void lower_el_aarch64_sync_c()
 {
+    disable_irq();
     //print SPSR_EL1 ELR_EL1 ESR_EL1
-    mini_uart_send_string("\r\n[Exception Handler]\r\n");
-    mini_uart_send_string("SPSR_EL1: ");
-    mini_uart_send_hex(spsr);
-    mini_uart_send_string("\r\n");
+    enqueue_task(print_register_info,NULL,0);
+    task_dispatcher(0);//dispatch task with irq enabled to support nested irq
+    
+    enable_irq();
+}
 
-    mini_uart_send_string("ELR_EL1: ");
-    mini_uart_send_hex(elr);
-    mini_uart_send_string("\r\n");
+void lower_el_aarch64_irq_c()
+{
+    disable_irq();//turn of irq in case race condition
+    
+    // get irq source
+    if (*CORE0_INTERRUPT_SOURCE & (1 << 1)) {
+        // Core timer interrupt
+        core_timer_irq_handler();
+    }
+    if (*IRQ_PENDING_1 & (1 << 29)) {
+        // Mini UART interrupt (bit 29 in IRQ_PENDING_1)
+        mini_uart_irq_handler();
+    }
+    task_dispatcher(TASK_MAX_PRIORITY);
 
-    mini_uart_send_string("ESR_EL1: ");
-    mini_uart_send_hex(esr);
-    mini_uart_send_string("\r\n");
+    enable_irq();
+
 }
 
 
@@ -104,4 +208,13 @@ void el_curr_el_spx_irq_c()
         mini_uart_irq_handler();
     }
     enable_irq();
+}
+
+
+/*-------------------Init----------------*/
+void irq_init()
+{
+    init_task_queue();
+    enable_irq();
+    core_timer_enable();
 }

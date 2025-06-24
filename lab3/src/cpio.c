@@ -180,8 +180,10 @@ void cpio_load_program()
 
         mini_uart_send_string("Jumping to user program (EL0)...\r\n");
 
-        asm volatile("mov x0, 0x340  \n");
-        asm volatile("msr spsr_el1, x0   \n");
+        asm volatile(
+            "mov x0, 0          \n"    // enable irq in el0
+            "msr spsr_el1, x0   \n"
+        );
         asm volatile("msr elr_el1, %0    \n" ::"r"(user_entry));
         asm volatile("msr sp_el0, %0    \n" ::"r"(user_stack));
         asm volatile("eret   \n");

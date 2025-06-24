@@ -164,7 +164,7 @@ void free_msg_slot(char *ptr) {
     }
 }
 
-/*Callback Function*/
+/*-------------------------Callback Function------------------------*/
 void print_msg_callback(void *msg)
 {
     //print message
