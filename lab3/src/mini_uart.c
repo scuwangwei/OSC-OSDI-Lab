@@ -56,7 +56,7 @@ char mini_uart_read()
 char mini_uart_read_non_block()
 {
     while(!((*AUX_MU_LSR_REG) & 0x1)){
-        task_dispatcher(TASK_MAX_PRIORITY);//keep checking if task need to be executed
+        task_dispatcher(0);//keep checking if task need to be executed
     }
     char tmp = (*AUX_MU_IO_REG) & 0xFF;
     if(tmp == '\r') tmp = '\n';// /r means newline in keyboard
@@ -210,14 +210,16 @@ void mini_uart_recv_irq_disable()
 
 int mini_uart_write_async(const char tmp, int isAsycn)
 {
-    //here,cpu will not polling transmit FIFO buffer,UART IRQ handler will handle the transmit FIFO buffer
+    //check ring buffer and wait it is not full(handler will send the ring buffer data)
     while(rbuf_is_full(&uart_tx_buffer))
     {
-        //do nothing until UART irq handler was trigger
+        //do nothing
         asm volatile("nop");
     }
     //ring buffer is not full,UART IRQ handler already put the ring buffer data to the transmit FIFO buffer),we can put data to ring buffer now
     int res = rbuf_put(&uart_tx_buffer,tmp);
+
+    //if need to send tx irq,enable it
     if(isAsycn) mini_uart_trans_irq_enable();
     return res;
 }
@@ -225,22 +227,24 @@ int mini_uart_write_async(const char tmp, int isAsycn)
 
 void mini_uart_send_string_async(const char *str)
 {
-   
+    //send string
     while(*str)
     {
         //string is too long,ring buffer is full,call handler transmit it first
         if(rbuf_is_full(&uart_tx_buffer))
         {
+            /*enable transmit irq so that handler will send the all of the data in ring buffer
+            (and the handler must be uninterruptable!!!,Otherwise might get race condition with uart_tx_buffer)*/
             mini_uart_trans_irq_enable();
         }
-        //call mini_uart_write_async withot enable irq,will enable irq after ring buffer is all set
+        //call mini_uart_write_async without enable irq,will enable irq after ring buffer is all set
         if(mini_uart_write_async(*(str++),0) < 0)
         {
             return;//something wrong,ring buffer is still full
         }
 
     }
-    mini_uart_trans_irq_enable();//enable trans irq after ring buffer was set
+    mini_uart_trans_irq_enable();//enable trans irq after ring buffer set
 
 }
 
@@ -264,7 +268,7 @@ void mini_uart_read_string_async(char *buffer, int max_len)
 {
     int i = 0;
     char c;
-
+    //read string
     while(i < max_len - 1)
     {
         if(mini_uart_read_async(&c) < 0) return;//something wrong,ring buffer is still empty
@@ -272,7 +276,7 @@ void mini_uart_read_string_async(char *buffer, int max_len)
             break; // get a cmd
         }
 
-        //echo back with asycn
+        //echo back with asycn(which mean only write one byte to tx ring buffer and enable tx irq immediately)
         mini_uart_write_async(c,1);
         
         buffer[i++] = c;

@@ -3,6 +3,13 @@
 #include "utils.h"
 #include "exception.h"
 
+/*
+Task Priority Level(From Lowest to Highest)
+    level 0: user program sync handler function
+    level 1: core timer irq related handler function
+    level 2: aux irq related function 
+*/
+
 
 /*--------------Task Queue-----------*/
 #define TASK_QUEUE_SIZE 32
@@ -38,6 +45,7 @@ int task_queue_empty(int level) {
     return ML_task_queue.head[level] == ML_task_queue.tail[level];
 }
 
+/*enqueue the task to the queue by their priority*/
 void enqueue_task(void (*func)(void *), void *arg,int priority)
 {
 
@@ -50,14 +58,15 @@ void enqueue_task(void (*func)(void *), void *arg,int priority)
     ML_task_queue.tail[priority] = next;
 }
 
+//dispatch task which priority >= prior_level
 void task_dispatcher(int prior_level)
 {
     int cur_lev_head;
-    while (prior_level >= 0)
+    while (prior_level <= TASK_MAX_PRIORITY)
     {
         if (task_queue_empty(prior_level)) 
         {
-            prior_level--;
+            prior_level++;
             continue;
         }
         cur_lev_head = ML_task_queue.head[prior_level];
@@ -69,8 +78,11 @@ void task_dispatcher(int prior_level)
     }
 }
 
+
+/*-------------------------------Handlers-----------------------*/
+
 //read and print registers info
-void print_register_info(void *arg)
+void print_register_info_func(void *arg)
 {
     unsigned long spsr, elr, esr;
     asm volatile("mrs %0, spsr_el1" : "=r"(spsr));
@@ -94,7 +106,52 @@ void print_register_info(void *arg)
 
 }
 
-/*-------------------------------Handlers-----------------------*/
+void mini_uart_irq_handler_func(void *arg)
+{
+    extern ringBuffer uart_rx_buffer;
+    extern ringBuffer uart_tx_buffer;
+    
+    //if [2:1] = 0b10 then receive FIFO has data
+    //if [2:1] = 0b01 then transmit holding empty
+    unsigned int irq_type = (*AUX_MU_IIR_REG >> 1) & 0x3; 
+    if(irq_type == 0b10)
+    {
+        //move receive FIFO buffer data to ring buffer
+        char c = (char)(*AUX_MU_IO_REG);
+        rbuf_put(&uart_rx_buffer, c);
+        //read finished,disable recieve IRQ
+        mini_uart_recv_irq_disable();
+    }
+    else if(irq_type == 0b01)
+    {
+        //keep sending data to trans FIFO buffer and check if it is empty
+
+re_send:
+        // trans FIFO buffer might have congestion,use while keep checking trans FIFO buffer
+        while(*AUX_MU_LSR_REG & 0x20)
+        {
+            char c;
+            if(rbuf_get(&uart_tx_buffer,&c) < 0)
+            {
+                //ring bufer empty,nothing to transmit
+                break;
+            }
+            *AUX_MU_IO_REG = c;//put data from ring buffer to transmit FIFO buffer
+                
+            }
+
+        
+        
+        //disable trans IRQ if ring buffer is epmty
+        if (rbuf_is_empty(&uart_tx_buffer))
+        {
+            mini_uart_trans_irq_disable();
+        }
+        //still have data to transmit,go to re_send,make sure it transmit all data from ring buffer in this handler
+        else goto re_send;
+    }
+}
+
 
 /*Core Timer Interrupt Handler,executed when time expired*/
 void core_timer_irq_handler() {
@@ -122,57 +179,15 @@ void core_timer_irq_handler() {
         core_timer_set_timeout_ticks(delay);
         return;
     }
+    //otherwise set timeout to 1
     else core_timer_set_timeout(1);
 
-}
-
-void mini_uart_irq_handler_func(void *arg)
-{
-    extern ringBuffer uart_rx_buffer;
-    extern ringBuffer uart_tx_buffer;
-    
-    //if [2:1] = 0b10 then receive FIFO has data
-    //if [2:1] = 0b01 then transmit holding empty
-    unsigned int irq_type = (*AUX_MU_IIR_REG >> 1) & 0x3; 
-    if(irq_type == 0b10)
-    {
-        //move receive FIFO buffer data to ring buffer
-        char c = (char)(*AUX_MU_IO_REG);
-        rbuf_put(&uart_rx_buffer, c);
-        //read finished,disable recieve IRQ
-        mini_uart_recv_irq_disable();
-    }
-    else if(irq_type == 0b01)
-    {
-        //keep sending data to trans FIFO buffer and check if it is empty
-
-re_send:
-        while(*AUX_MU_LSR_REG & 0x20) // trans FIFO buffer might have congestion,use while keep checking trans FIFO buffer
-        {
-            char c;
-            if(rbuf_get(&uart_tx_buffer,&c) < 0)
-            {
-                //ring bufer empty,nothing to transmit
-                break;
-            }
-            *AUX_MU_IO_REG = c;//put data from ring buffer to transmit FIFO buffer
-                
-            }
-
-        
-        
-        //disable trans IRQ if ring buffer is epmty
-        if (rbuf_is_empty(&uart_tx_buffer))
-        {
-            mini_uart_trans_irq_disable();
-        }
-        else goto re_send;
-    }
 }
 
 /*UART Interrupt Handler for Async Read/Write Mini UART*/
 void mini_uart_irq_handler()
 {
+    //enqueue task(the handler function will read or write data)
     enqueue_task(mini_uart_irq_handler_func,NULL,TASK_MAX_PRIORITY);
 }
 
@@ -180,10 +195,10 @@ void mini_uart_irq_handler()
 void lower_el_aarch64_sync_c()
 {
     disable_irq();
-    //print SPSR_EL1 ELR_EL1 ESR_EL1
-    enqueue_task(print_register_info,NULL,0);
+    //enqueue task(the handler function will print register info)
+    enqueue_task(print_register_info_func,NULL,0);
     //this is from user program,so need to dispatch all task in handler,because it won't back to shell function where dispatch tasks
-    task_dispatcher(TASK_MAX_PRIORITY);
+    task_dispatcher(0);
     
     enable_irq();
 }
@@ -203,7 +218,7 @@ void lower_el_aarch64_irq_c()
     }
 
     //this is from user program,so need to dispatch all task in handler,because it won't back to shell function where dispatch tasks
-    task_dispatcher(TASK_MAX_PRIORITY);
+    task_dispatcher(0);
 
     enable_irq();
 

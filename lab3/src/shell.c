@@ -181,7 +181,7 @@ void shell()
 {
     while(1)
     {
-        task_dispatcher(TASK_MAX_PRIORITY);//execute task if task queue is not empty
+        task_dispatcher(0);//execute task if task queue is not empty
         mini_uart_send_string("#");//echo a # to console
         mini_uart_read_string_non_block(cmd_buffer,CMD_BUFFER_SIZE);//wait for host send command and keep checking task queue
         parse_command(cmd_buffer);//parse command
