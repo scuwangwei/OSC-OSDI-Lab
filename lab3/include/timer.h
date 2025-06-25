@@ -16,6 +16,7 @@ typedef struct timer_event {
 void core_timer_set_timeout(unsigned long sec);
 void core_timer_enable() ;
 void enable_irq();
+void disable_irq();
 unsigned long get_current_time();
 unsigned long get_freq();
 unsigned long read_cntpct_el0();

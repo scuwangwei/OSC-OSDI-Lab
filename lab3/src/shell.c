@@ -46,7 +46,12 @@ void test_asycn_mini_uart()
     mini_uart_send_string_async(test_buffer);
     mini_uart_send_string_async("\r\n");
 
-    aux_irq_disable();
+    //disable after async transmit send all data
+    while(!rbuf_is_empty(&uart_tx_buffer))
+    {
+        asm volatile("nop");
+    }
+    aux_irq_disable;
 
 }
 

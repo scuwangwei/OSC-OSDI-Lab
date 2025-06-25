@@ -57,7 +57,7 @@ char mini_uart_read_non_block()
 {
     while(!((*AUX_MU_LSR_REG) & 0x1)){
         task_dispatcher(TASK_MAX_PRIORITY);//keep checking if task need to be executed
-     }
+    }
     char tmp = (*AUX_MU_IO_REG) & 0xFF;
     if(tmp == '\r') tmp = '\n';// /r means newline in keyboard
     return tmp;
@@ -225,24 +225,23 @@ int mini_uart_write_async(const char tmp, int isAsycn)
 
 void mini_uart_send_string_async(const char *str)
 {
-    int count = RBUF_SIZE - 1; //ring buffer size
+   
     while(*str)
     {
+        //string is too long,ring buffer is full,call handler transmit it first
+        if(rbuf_is_full(&uart_tx_buffer))
+        {
+            mini_uart_trans_irq_enable();
+        }
         //call mini_uart_write_async withot enable irq,will enable irq after ring buffer is all set
         if(mini_uart_write_async(*(str++),0) < 0)
         {
             return;//something wrong,ring buffer is still full
         }
 
-        count--;
-        //string is too long,ring buffer is full,call handler transmit it first
-        if(count == 0)
-        {
-            mini_uart_trans_irq_enable();
-            count = RBUF_SIZE - 1;
-        }
     }
     mini_uart_trans_irq_enable();//enable trans irq after ring buffer was set
+
 }
 
 int mini_uart_read_async(char *c)

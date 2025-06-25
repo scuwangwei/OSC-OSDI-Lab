@@ -17,7 +17,10 @@ BL_S:=$(shell find bootloader/ -name '*.s')
 
 BL_OBJS:=$(BL_C:%.c=%.o) \
 		$(BL_S:%.s=%.o) \
-		src/mini_uart.o
+		src/mini_uart.o \
+		src/utils.o \
+		src/exception.o \
+		src/timer.o
 
 OBJS:= $(SRC_C:%.c=%.o) \
 		$(SRC_S:%.s=%.o) \
