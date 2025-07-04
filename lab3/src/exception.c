@@ -146,7 +146,7 @@ void mini_uart_irq_handler_func(void *arg)
         {
             mini_uart_trans_irq_disable();
         }
-        //still have data to transmit,go to re_send,make sure it transmit all data from ring buffer in this handler
+        //still have data to transmit return with remain enable transmit irq
         return;
     }
 }
