@@ -126,7 +126,6 @@ void mini_uart_irq_handler_func(void *arg)
     {
         //keep sending data to trans FIFO buffer and check if it is empty
 
-re_send:
         // trans FIFO buffer might have congestion,use while keep checking trans FIFO buffer
         while(*AUX_MU_LSR_REG & 0x20)
         {
@@ -148,7 +147,7 @@ re_send:
             mini_uart_trans_irq_disable();
         }
         //still have data to transmit,go to re_send,make sure it transmit all data from ring buffer in this handler
-        else goto re_send;
+        return;
     }
 }
 
