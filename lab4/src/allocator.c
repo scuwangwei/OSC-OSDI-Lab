@@ -355,6 +355,9 @@ void *malloc(unsigned long size)
     //allocate memory from pool
     if(addr = pool_alloc(size))
     {
+        mini_uart_send_string("data start at:");
+        mini_uart_send_hex((unsigned int)addr);
+        mini_uart_send_string("\r\n");
         return addr;
     }
     //allocate memory from buddy system
